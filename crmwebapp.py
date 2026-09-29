@@ -1,12 +1,15 @@
+import json
 import streamlit as st
-import pandas as pd
-import os
-import base64
-import hashlib
 import firebase_admin
 from firebase_admin import credentials, firestore
-from datetime import datetime
 
+if not firebase_admin._apps:
+    # Debe decir "firebase_json" aquí adentro:
+    creds_dict = json.loads(st.secrets["firebase_json"])
+    cred = credentials.Certificate(creds_dict)
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
 # 1. Configuración de la página web
 st.set_page_config(
     page_title="BAYAMON TRUCK PARTS | CRM", 
