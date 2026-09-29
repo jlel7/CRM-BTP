@@ -1,3 +1,4 @@
+import base64
 import json
 import streamlit as st
 import firebase_admin
