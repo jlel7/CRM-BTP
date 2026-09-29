@@ -20,6 +20,7 @@ st.set_page_config(
 # ==========================================
 if not firebase_admin._apps:
     try:
+        # Lee el JSON de credenciales almacenado en los secretos de Streamlit Cloud
         creds_dict = json.loads(st.secrets["firebase_json"])
         cred = credentials.Certificate(creds_dict)
         firebase_admin.initialize_app(cred)
@@ -37,17 +38,16 @@ def hash_password(password):
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
 def autenticar_usuario(username, password):
-    """Verifica las credenciales del usuario sin requerir índices compuestos."""
+    """Verifica las credenciales del usuario sin requerir índices compuestos en Firestore."""
     try:
         users_ref = db.collection("usuarios")
-        # Filtramos SOLO por username (un solo .where nunca requiere índice compuesto)
+        # Filtramos solo por username para evitar requerir índices compuestos
         query = users_ref.where("username", "==", username.strip().lower()).limit(1).get()
         
         password_hash_input = hash_password(password)
         
         for doc in query:
             user_data = doc.to_dict()
-            # Validamos el hash de la contraseña de forma segura en Python
             if user_data.get("password_hash") == password_hash_input:
                 return user_data
                 
@@ -118,22 +118,24 @@ if menu == "Clientes":
 elif menu == "Notas y Seguimiento":
     st.title("Notas de Seguimiento")
     
-    cliente_id_input = st.text_input("Ingrese el ID del Cliente para ver sus notas:")
+    cliente_id_input = st.text_input("Ingrese el ID del Contacto/Cliente para ver sus notas:")
     
     if cliente_id_input:
         try:
-            # Consulta limpia con un solo .where (sin requerir índices compuestos)
-            notas_docs = db.collection("notas").where("id_cliente", "==", cliente_id_input.strip()).stream()
+            # CONSULTA CORREGIDA: Usa "id_contacto" para hacer match perfecto con tu índice de Firebase
+            notas_docs = db.collection("notas").where("id_contacto", "==", cliente_id_input.strip()).stream()
             notas = [n.to_dict() for n in notas_docs]
             
             if notas:
                 df_notas = pd.DataFrame(notas)
+                
+                # Ordenamiento seguro mediante Pandas
                 if "fecha" in df_notas.columns:
                     df_notas = df_notas.sort_values(by="fecha", ascending=False)
                 
                 st.dataframe(df_notas, use_container_width=True)
             else:
-                st.info("No se encontraron notas para este cliente.")
+                st.info("No se encontraron notas para este contacto.")
                 
         except Exception as e:
             st.error(f"Error al cargar las notas: {e}")
