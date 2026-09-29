@@ -20,7 +20,6 @@ st.set_page_config(
 # ==========================================
 if not firebase_admin._apps:
     try:
-        # Lee el JSON de credenciales almacenado en los secretos de Streamlit Cloud
         creds_dict = json.loads(st.secrets["firebase_json"])
         cred = credentials.Certificate(creds_dict)
         firebase_admin.initialize_app(cred)
@@ -38,18 +37,20 @@ def hash_password(password):
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
 def autenticar_usuario(username, password):
-    """Verifica las credenciales del usuario en Firestore."""
+    """Verifica las credenciales del usuario sin requerir índices compuestos."""
     try:
         users_ref = db.collection("usuarios")
-        query = (
-            users_ref.where("username", "==", username.strip().lower())
-            .where("password_hash", "==", hash_password(password))
-            .limit(1)
-            .get()
-        )
+        # Filtramos SOLO por username (un solo .where nunca requiere índice compuesto)
+        query = users_ref.where("username", "==", username.strip().lower()).limit(1).get()
+        
+        password_hash_input = hash_password(password)
         
         for doc in query:
-            return doc.to_dict()
+            user_data = doc.to_dict()
+            # Validamos el hash de la contraseña de forma segura en Python
+            if user_data.get("password_hash") == password_hash_input:
+                return user_data
+                
         return None
     except Exception as e:
         st.error(f"Error en la autenticación: {e}")
@@ -95,7 +96,6 @@ if menu == "Cerrar Sesión":
 if menu == "Clientes":
     st.title("Gestión de Clientes - Bayamon Truck Parts")
     
-    # Ejemplo de lectura de clientes desde Firestore
     try:
         clientes_ref = db.collection("clientes").stream()
         filas = []
@@ -106,7 +106,6 @@ if menu == "Clientes":
         
         if filas:
             df = pd.DataFrame(filas)
-            # Asegurar columnas deseadas si existen
             columnas_mostrar = [col for col in ["ID", "Empresa", "Sector", "Nombre", "Apellido", "Cargo", "Email", "Teléfono"] if col in df.columns]
             st.dataframe(df[columnas_mostrar], use_container_width=True)
         else:
@@ -123,15 +122,12 @@ elif menu == "Notas y Seguimiento":
     
     if cliente_id_input:
         try:
-            # CONSULTA SEGURA: Filtramos por cliente SIN usar .order_by() en Firestore
-            # para evitar por completo el error FailedPrecondition (índice compuesto).
+            # Consulta limpia con un solo .where (sin requerir índices compuestos)
             notas_docs = db.collection("notas").where("id_cliente", "==", cliente_id_input.strip()).stream()
             notas = [n.to_dict() for n in notas_docs]
             
             if notas:
                 df_notas = pd.DataFrame(notas)
-                
-                # ORDENAMIENTO SEGURO EN PANDAS: Ordenamos por fecha localmente
                 if "fecha" in df_notas.columns:
                     df_notas = df_notas.sort_values(by="fecha", ascending=False)
                 
