@@ -1,12 +1,11 @@
-import base64
-from datetime import datetime
-import hashlib
-import json
-import os
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import os
+import base64
+import hashlib
 import firebase_admin
 from firebase_admin import credentials, firestore
+from datetime import datetime
 
 # 1. Configuración de la página web
 st.set_page_config(
@@ -18,32 +17,21 @@ st.set_page_config(
 
 # 2. INICIALIZACIÓN DE FIREBASE FIRESTORE
 if not firebase_admin._apps:
-    cred = None
+    # Opción A: Buscar el archivo JSON local en la misma carpeta
     cred_path = os.path.join(os.path.dirname(__file__), "firebase_credentials.json")
-    
-    # Opción A: Archivo local
     if os.path.exists(cred_path):
         cred = credentials.Certificate(cred_path)
-    # Opción B: Streamlit Cloud Secrets
-    elif "firebase" in st.secrets:
-        try:
-            secrets_dict = dict(st.secrets["firebase"])
-            # Corregir saltos de línea en la clave privada
-            if "private_key" in secrets_dict:
-                secrets_dict["private_key"] = secrets_dict["private_key"].replace("\\n", "\n")
-            cred = credentials.Certificate(secrets_dict)
-        except Exception as e:
-            st.error(f"⚠️ Error al leer los secretos de Firebase: {e}")
-            st.stop()
-    else:
-        st.error("⚠️ No se encontró la configuración de Firebase en 'firebase_credentials.json' ni en st.secrets['firebase'].")
-        st.stop()
-
-    try:
         firebase_admin.initialize_app(cred)
-    except Exception as e:
-        st.error(f"⚠️ Error inicializando Firebase: {e}")
-        st.stop()
+    else:
+        # Opción B: Si usas los Secrets de Streamlit Cloud
+        try:
+            import json
+            secrets_dict = dict(st.secrets["firebase"])
+            cred = credentials.Certificate(secrets_dict)
+            firebase_admin.initialize_app(cred)
+        except Exception as e:
+            st.error(f"⚠️ No se encontró la configuración de Firebase. Asegúrate de colocar 'firebase_credentials.json' o configurarlo en st.secrets. Error: {e}")
+            st.stop()
 
 db = firestore.client()
 
@@ -296,6 +284,7 @@ with st.sidebar.form("form_contacto", clear_on_submit=True):
             st.sidebar.error("Empresa, Nombre y Apellido son obligatorios.")
         else:
             try:
+                # Verificar duplicados por teléfono o email
                 duplicado = False
                 if telefono.strip():
                     t_check = list(db.collection("contactos").where("telefono", "==", telefono.strip()).limit(1).get())
@@ -307,12 +296,14 @@ with st.sidebar.form("form_contacto", clear_on_submit=True):
                 if duplicado:
                     st.sidebar.warning("Este contacto ya existe (teléfono o email coinciden).")
                 else:
-                    _, cliente_ref = db.collection("clientes").add({
+                    # Guardar cliente
+                    cliente_ref = db.collection("clientes").add({
                         "nombre_empresa": empresa.strip(),
                         "sector": sector.strip()
                     })
-                    id_cliente = cliente_ref.id
+                    id_cliente = cliente_ref[1].id
 
+                    # Guardar contacto vinculado
                     db.collection("contactos").add({
                         "id_cliente": id_cliente,
                         "nombre": nombre.strip(),
@@ -320,7 +311,7 @@ with st.sidebar.form("form_contacto", clear_on_submit=True):
                         "cargo": cargo.strip(),
                         "email": email.strip(),
                         "telefono": telefono.strip(),
-                        "nombre_empresa_cache": empresa.strip(),
+                        "nombre_empresa_cache": empresa.strip(), # Para facilitar filtros
                         "sector_cache": sector.strip()
                     })
                     st.sidebar.success("¡Contacto guardado con éxito!")
@@ -350,11 +341,11 @@ if archivo_excel is not None:
                 if not emp or not nom or not ape or emp == 'nan':
                     continue
 
-                _, cliente_ref = db.collection("clientes").add({
+                cliente_ref = db.collection("clientes").add({
                     "nombre_empresa": emp,
                     "sector": sec if sec != 'nan' else ''
                 })
-                id_cliente = cliente_ref.id
+                id_cliente = cliente_ref[1].id
 
                 db.collection("contactos").add({
                     "id_cliente": id_cliente,
@@ -443,11 +434,8 @@ with pestanas[0]:
 
                 with col_historial:
                     st.markdown("#### Historial de Interacciones")
-                    # Filtrado simple sin requerir índice compuesto en Firestore
-                    notas_docs = db.collection("notas").where("id_contacto", "==", id_sel).stream()
+                    notas_docs = db.collection("notas").where("id_contacto", "==", id_sel).order_by("fecha", direction=firestore.Query.DESCENDING).stream()
                     notas = [n.to_dict() for n in notas_docs]
-                    # Ordenar en memoria
-                    notas.sort(key=lambda x: str(x.get('fecha', '')), reverse=True)
 
                     if notas:
                         for nota_item in notas:
@@ -541,12 +529,14 @@ with pestanas[1]:
                             st.error("Empresa, Nombre y Apellido no pueden quedar vacíos.")
                         else:
                             try:
+                                # Actualizar cliente si existe
                                 if id_cliente:
                                     db.collection("clientes").document(id_cliente).update({
                                         "nombre_empresa": nuevo_empresa.strip(),
                                         "sector": nuevo_sector.strip()
                                     })
                                 
+                                # Actualizar contacto
                                 contacto_doc_ref.update({
                                     "nombre": nuevo_nombre.strip(),
                                     "apellido": nuevo_apellido.strip(),
@@ -609,6 +599,7 @@ if st.session_state["rol"] == "Admin":
                     if not nuevo_user.strip() or not nuevo_nombre.strip() or not nuevo_pass.strip():
                         st.error("Todos los campos marcados con * son obligatorios.")
                     else:
+                        # Verificar si ya existe el username
                         existe = list(db.collection("usuarios").where("username", "==", nuevo_user.strip().lower()).limit(1).get())
                         if existe:
                             st.error("Ese nombre de usuario ya existe. Por favor elige otro.")
