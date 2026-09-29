@@ -8,9 +8,9 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# ==========================================
-# 1. CONFIGURACIÓN DE LA PÁGINA
-# ==========================================
+# ==============================================================================
+# 1. CONFIGURACIÓN DE PÁGINA
+# ==============================================================================
 st.set_page_config(
     page_title="BAYAMON TRUCK PARTS | CRM", 
     page_icon="🚛",
@@ -18,14 +18,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ==========================================
-# 2. INICIALIZACIÓN DE FIREBASE FIRESTORE
-# ==========================================
+# ==============================================================================
+# 2. INICIALIZACIÓN ROBUSTA DE FIREBASE FIRESTORE
+# ==============================================================================
 if not firebase_admin._apps:
     cred = None
     cred_path = os.path.join(os.path.dirname(__file__), "firebase_credentials.json")
     
-    # 1. Intento por archivo local
+    # 1. Intento por archivo JSON local
     if os.path.exists(cred_path):
         cred = credentials.Certificate(cred_path)
     # 2. Intento por secret en formato JSON string
@@ -36,7 +36,7 @@ if not firebase_admin._apps:
                 creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
             cred = credentials.Certificate(creds_dict)
         except Exception as e:
-            st.error(f"Error al decodificar 'firebase_json': {e}")
+            st.error(f"Error decodificando 'firebase_json': {e}")
             st.stop()
     # 3. Intento por secret en formato TOML [firebase]
     elif "firebase" in st.secrets:
@@ -46,10 +46,10 @@ if not firebase_admin._apps:
                 creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
             cred = credentials.Certificate(creds_dict)
         except Exception as e:
-            st.error(f"Error al leer secret [firebase]: {e}")
+            st.error(f"Error leyendo 'st.secrets[firebase]': {e}")
             st.stop()
     else:
-        st.error("⚠️ No se encontró la configuración de Firebase en archivo ni en st.secrets.")
+        st.error("⚠️ No se encontró la configuración de Firebase en archivo local ni en st.secrets.")
         st.stop()
 
     try:
@@ -60,9 +60,9 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# ==========================================
+# ==============================================================================
 # 3. CAMIÓN SVG EN FORMATO BASE64
-# ==========================================
+# ==============================================================================
 svg_truck_raw = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 85" width="170" height="72">
   <defs>
     <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -100,9 +100,9 @@ svg_truck_raw = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 85" 
 
 truck_base64 = base64.b64encode(svg_truck_raw.encode("utf-8")).decode("utf-8")
 
-# ==========================================
-# 4. ESTILOS CSS PROFESIONALES Y ERGONÓMICOS
-# ==========================================
+# ==============================================================================
+# 4. ESTILOS CSS PROFESIONALES DE ALTO CONTRASTE
+# ==============================================================================
 st.markdown("""
     <style>
         .stApp { background-color: #f8fafc !important; }
@@ -160,9 +160,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ==========================================
-# 5. SEGURIDAD Y USUARIOS
-# ==========================================
+# ==============================================================================
+# 5. SEGURIDAD, CONTRASEÑAS Y AUTENTICACIÓN
+# ==============================================================================
 def hash_password(password):
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
@@ -196,9 +196,9 @@ def autenticar_usuario(username, password):
         return user_data
     return None
 
-# ==========================================
-# 6. PANTALLA DE LOGIN
-# ==========================================
+# ==============================================================================
+# 6. PANTALLA DE ACCESO (LOGIN)
+# ==============================================================================
 if not st.session_state["autenticado"]:
     col_izq, col_centro, col_der = st.columns([1, 1.4, 1])
     with col_centro:
@@ -207,7 +207,7 @@ if not st.session_state["autenticado"]:
             <div style="text-align: center; margin-bottom: 1.5rem;">
                 <img src="data:image/svg+xml;base64,{truck_base64}" alt="Camión" style="max-width: 160px; margin: 0 auto; display: block;" />
                 <h2 style="color: #0f172a; margin: 15px 0 5px 0; font-weight: 900;">BAYAMON TRUCK PARTS</h2>
-                <p style="color: #64748b; font-size: 0.95rem;">Acceso al CRM Comercial</p>
+                <p style="color: #64748b; font-size: 0.95rem;">Acceso al CRM en la Nube</p>
             </div>
         """, unsafe_allow_html=True)
 
@@ -221,7 +221,7 @@ if not st.session_state["autenticado"]:
                 if datos_user:
                     st.session_state["autenticado"] = True
                     st.session_state["usuario"] = datos_user["username"]
-                    st.session_state["nombre_completo"] = datos_user.get("nombre_completo", datos_user.get("nombre", "Usuario"))
+                    st.session_state["nombre_completo"] = datos_user.get("nombre_completo", "Usuario")
                     st.session_state["rol"] = datos_user.get("rol", "Vendedor")
                     st.success("Acceso concedido.")
                     st.rerun()
@@ -231,9 +231,9 @@ if not st.session_state["autenticado"]:
         st.info("💡 **Acceso inicial:** Usuario: `admin` | Contraseña: `admin123`")
     st.stop()
 
-# ==========================================
-# 7. PANEL PRINCIPAL Y MÉTRICAS (KPIs)
-# ==========================================
+# ==============================================================================
+# 7. PANEL PRINCIPAL Y TARJETAS KPI
+# ==============================================================================
 def obtener_metricas():
     total_empresas = len(list(db.collection("clientes").stream()))
     total_contactos = len(list(db.collection("contactos").stream()))
@@ -280,9 +280,9 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ==========================================
-# 8. BARRA LATERAL (REGISTRO E IMPORTACIÓN)
-# ==========================================
+# ==============================================================================
+# 8. BARRA LATERAL (REGISTRO INDIVIDUAL + IMPORTACIÓN MASIVA MEJORADA)
+# ==============================================================================
 st.sidebar.markdown(f"""
     <div class="user-badge">
         <div>
@@ -348,6 +348,7 @@ with st.sidebar.form("form_contacto", clear_on_submit=True):
             except Exception as e:
                 st.sidebar.error(f"Error: {e}")
 
+# --- IMPORTACIÓN MASIVA INTELIGENTE DE EXCEL ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📥 Importación Masiva")
 archivo_excel = st.sidebar.file_uploader("Cargar archivo .xlsx", type=["xlsx", "xls"])
@@ -355,23 +356,43 @@ archivo_excel = st.sidebar.file_uploader("Cargar archivo .xlsx", type=["xlsx", "
 if archivo_excel is not None:
     if st.sidebar.button("Procesar e Importar", use_container_width=True):
         try:
-            df_import = pd.read_excel(archivo_excel)
+            # dtype=str lee todo como texto puro y previene que los teléfonos terminen en .0 o en notación científica
+            df_import = pd.read_excel(archivo_excel, dtype=str)
+            
+            # Buscador inteligente de columnas insensible a tildes, mayúsculas o espacios
+            def extraer_campo(fila, posibles_nombres):
+                for col in fila.index:
+                    col_limpia = str(col).strip().lower()
+                    col_sin_tilde = col_limpia.replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ó', 'o').replace('ú', 'u')
+                    
+                    for pos in posibles_nombres:
+                        pos_sin_tilde = pos.lower().replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ó', 'o').replace('ú', 'u')
+                        if col_sin_tilde == pos_sin_tilde or col_limpia == pos.lower():
+                            valor = str(fila[col]).strip()
+                            if valor.lower() not in ['nan', 'none', '', '<na>']:
+                                # Si Excel dejó un .0 al final por formato decimal, se lo quitamos
+                                if valor.endswith('.0'):
+                                    valor = valor[:-2]
+                                return valor
+                return ''
+
             importados = 0
             for _, row in df_import.iterrows():
-                emp = str(row.get('Empresa', '')).strip()
-                sec = str(row.get('Sector', '')).strip()
-                nom = str(row.get('Nombre', '')).strip()
-                ape = str(row.get('Apellido', '')).strip()
-                car = str(row.get('Cargo', '')).strip()
-                eml = str(row.get('Email', '')).strip()
-                tel = str(row.get('Telefono', '')).strip()
+                emp = extraer_campo(row, ['Empresa', 'Compañia', 'Compania', 'Cliente'])
+                sec = extraer_campo(row, ['Sector', 'Industria', 'Categoria'])
+                nom = extraer_campo(row, ['Nombre', 'First Name'])
+                ape = extraer_campo(row, ['Apellido', 'Apellidos', 'Last Name'])
+                car = extraer_campo(row, ['Cargo', 'Puesto', 'Posicion'])
+                eml = extraer_campo(row, ['Email', 'Correo', 'Correo Electronico', 'E-mail'])
+                tel = extraer_campo(row, ['Telefono', 'Teléfono', 'Celular', 'Movil', 'Móvil', 'Tel', 'Phone'])
 
-                if not emp or not nom or not ape or emp.lower() == 'nan':
+                # Omitir filas sin datos principales
+                if not emp or not nom:
                     continue
 
                 _, cliente_ref = db.collection("clientes").add({
                     "nombre_empresa": emp,
-                    "sector": sec if sec.lower() != 'nan' else ''
+                    "sector": sec
                 })
                 id_cliente = cliente_ref.id
 
@@ -379,31 +400,31 @@ if archivo_excel is not None:
                     "id_cliente": id_cliente,
                     "nombre": nom,
                     "apellido": ape,
-                    "cargo": car if car.lower() != 'nan' else '',
-                    "email": eml if eml.lower() != 'nan' else '',
-                    "telefono": tel if tel.lower() != 'nan' else '',
+                    "cargo": car,
+                    "email": eml,
+                    "telefono": tel,  # <-- Teléfono capturado fielmente
                     "nombre_empresa_cache": emp,
-                    "sector_cache": sec if sec.lower() != 'nan' else ''
+                    "sector_cache": sec
                 })
                 importados += 1
 
-            st.sidebar.success(f"Se importaron {importados} contactos exitosamente.")
+            st.sidebar.success(f"¡Se importaron {importados} contactos con sus teléfonos exitosamente!")
             st.rerun()
         except Exception as e:
             st.sidebar.error(f"Error al procesar archivo: {e}")
 
-# ==========================================
-# 9. PESTAÑAS PRINCIPALES DEL SISTEMA
-# ==========================================
+# ==============================================================================
+# 9. PESTAÑAS PRINCIPALES DEL CRM
+# ==============================================================================
 pestanas_nombres = ["📋 Directorio y Notas", "✏️ Modificar Registros"]
 if st.session_state["rol"] == "Admin":
     pestanas_nombres.append("👥 Gestión de Usuarios")
 
 pestanas = st.tabs(pestanas_nombres)
 
-# ------------------------------------------
-# PESTAÑA 1: DIRECTORIO Y NOTAS DE SEGUIMIENTO
-# ------------------------------------------
+# ------------------------------------------------------------------------------
+# PESTAÑA 1: DIRECTORIO, FICHA DE CONTACTO Y NOTAS
+# ------------------------------------------------------------------------------
 with pestanas[0]:
     filtro = st.text_input("Buscador Central", placeholder="🔍 Buscar por empresa, nombre, cargo, teléfono, email...", label_visibility="collapsed")
 
@@ -411,9 +432,8 @@ with pestanas[0]:
     filas = []
     for doc in contactos_docs:
         c = doc.to_dict()
-        c_id = doc.id
         filas.append([
-            c_id, 
+            doc.id, 
             c.get("nombre_empresa_cache", "Sin empresa"), 
             c.get("sector_cache", "General"), 
             c.get("nombre", ""), 
@@ -464,10 +484,10 @@ with pestanas[0]:
 
                 with col_historial:
                     st.markdown("#### Historial de Interacciones")
-                    # Consulta segura: sin .order_by() en Firestore para evitar errores de índice compuesto
+                    # Consulta segura: sin .order_by() en Firestore para no requerir índice compuesto
                     notas_docs = db.collection("notas").where("id_contacto", "==", id_sel).stream()
                     notas = [n.to_dict() for n in notas_docs]
-                    # Ordenar en memoria con Python
+                    # Ordenar en memoria por fecha más reciente
                     notas.sort(key=lambda x: str(x.get('fecha', '')), reverse=True)
 
                     if notas:
@@ -489,7 +509,7 @@ with pestanas[0]:
                     with st.form("form_nota", clear_on_submit=True):
                         nueva_nota = st.text_area(
                             "Detalles de la conversación o acuerdo:", 
-                            placeholder="Ej: Se coordinó entrega de repuestos...",
+                            placeholder="Ej: Se cotizaron frenos de aire y filtros...",
                             height=120
                         )
                         submit_nota = st.form_submit_button("Guardar Nota", use_container_width=True)
@@ -505,9 +525,9 @@ with pestanas[0]:
     else:
         st.info("No se encontraron registros activos en la base de datos.")
 
-# ------------------------------------------
+# ------------------------------------------------------------------------------
 # PESTAÑA 2: MODIFICAR / EDITAR CONTACTOS
-# ------------------------------------------
+# ------------------------------------------------------------------------------
 with pestanas[1]:
     st.markdown("### Modificar Datos de Contacto y Empresa")
     
@@ -585,9 +605,9 @@ with pestanas[1]:
     else:
         st.info("No hay contactos disponibles para modificar.")
 
-# ------------------------------------------
-# PESTAÑA 3: GESTIÓN DE USUARIOS (ADMIN)
-# ------------------------------------------
+# ------------------------------------------------------------------------------
+# PESTAÑA 3: GESTIÓN DE USUARIOS (SOLO ADMINISTRADOR)
+# ------------------------------------------------------------------------------
 if st.session_state["rol"] == "Admin":
     with pestanas[2]:
         st.markdown("### 👥 Administración Completa de Usuarios")
@@ -605,7 +625,7 @@ if st.session_state["rol"] == "Admin":
             u = doc.to_dict()
             usuarios_db.append((doc.id, u.get("username", ""), u.get("nombre_completo", ""), u.get("rol", ""), u.get("fecha_creacion", "")))
 
-        # 1. LISTADO
+        # 1. LISTADO DE USUARIOS
         with subtab_lista:
             if usuarios_db:
                 df_usuarios = pd.DataFrame(usuarios_db, columns=["ID", "Usuario", "Nombre Completo", "Rol", "Fecha de Creación"])
@@ -613,7 +633,7 @@ if st.session_state["rol"] == "Admin":
             else:
                 st.info("No hay usuarios registrados.")
 
-        # 2. CREAR
+        # 2. CREAR USUARIO
         with subtab_crear:
             st.markdown("#### Registrar un Nuevo Acceso")
             with st.form("form_nuevo_usuario", clear_on_submit=True):
@@ -644,7 +664,7 @@ if st.session_state["rol"] == "Admin":
                             st.success(f"Usuario '{nuevo_user}' creado exitosamente.")
                             st.rerun()
 
-        # 3. EDITAR
+        # 3. EDITAR USUARIO
         with subtab_editar:
             st.markdown("#### Modificar Datos o Cambiar Contraseña")
             if usuarios_db:
@@ -693,7 +713,7 @@ if st.session_state["rol"] == "Admin":
             else:
                 st.info("No hay usuarios disponibles.")
 
-        # 4. ELIMINAR
+        # 4. ELIMINAR USUARIO
         with subtab_eliminar:
             st.markdown("#### Dar de Baja una Cuenta")
             if usuarios_db:
