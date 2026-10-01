@@ -409,9 +409,8 @@ with col_kpi3:
     """, unsafe_allow_html=True)
     
     # Botón superpuesto transparente para capturar el clic/doble clic de inmediato
-    if st.button("abrir_kpi_notas", key="kpi_notas_click", label_visibility="collapsed"):
-        dialog_seguimiento_kpi()
-
+    if st.button("abrir_kpi_notas", key="kpi_notas_click"):
+    dialog_seguimiento_kpi()
 # ==============================================================================
 # 9. BARRA LATERAL (REGISTRO INDIVIDUAL + IMPORTACIÓN MASIVA INTELIGENTE)
 # ==============================================================================
