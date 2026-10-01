@@ -393,7 +393,6 @@ with col_kpi2:
     """, unsafe_allow_html=True)
 
 with col_kpi3:
-    # 🌟 TARJETA DE NOTAS INTERACTIVA AL CLIC / DOBLE CLIC 🌟
     st.markdown(f"""
         <div class="kpi-card kpi-interactive-card" 
              style="border-left: 5.5px solid #d97706;"
@@ -407,10 +406,9 @@ with col_kpi3:
             <div style="font-size: 2.2rem;">📝</div>
         </div>
     """, unsafe_allow_html=True)
-    
-    # Botón superpuesto transparente para capturar el clic/doble clic de inmediato
+
     if st.button("abrir_kpi_notas", key="kpi_notas_click"):
-    dialog_seguimiento_kpi()
+        dialog_seguimiento_kpi()
 # ==============================================================================
 # 9. BARRA LATERAL (REGISTRO INDIVIDUAL + IMPORTACIÓN MASIVA INTELIGENTE)
 # ==============================================================================
