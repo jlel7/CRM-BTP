@@ -101,7 +101,7 @@ svg_truck_raw = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 85" 
 truck_base64 = base64.b64encode(svg_truck_raw.encode("utf-8")).decode("utf-8")
 
 # ==============================================================================
-# 4. ESTILOS CSS PROFESIONALES (TARJETAS KPI INTERACTIVAS)
+# 4. ESTILOS CSS PROFESIONALES DE ALTO CONTRASTE
 # ==============================================================================
 st.markdown("""
     <style>
@@ -143,14 +143,14 @@ st.markdown("""
         button p, .stButton > button p, button span { color: #ffffff !important; font-weight: 700 !important; }
         button:hover, .stButton > button:hover { background-color: #1d4ed8 !important; box-shadow: 0 6px 14px rgba(29, 78, 216, 0.4) !important; }
         
-        /* DISEÑO DE TARJETAS KPI */
+        /* TARJETAS KPI */
         .kpi-card {
             background-color: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 10px; padding: 1.1rem 1.3rem;
             box-shadow: 0 2px 6px rgba(0,0,0,0.04); display: flex; align-items: center; justify-content: space-between;
             min-height: 92px; height: 92px; box-sizing: border-box;
         }
         
-        /* TARJETA KPI INTERACTIVA (NOTAS) */
+        /* TARJETA INTERACTIVA DE NOTAS */
         .kpi-interactive-card {
             cursor: pointer !important;
             transition: all 0.22s ease-in-out !important;
@@ -181,6 +181,16 @@ st.markdown("""
             border: none !important;
             padding: 0 !important;
             margin: 0 !important;
+        }
+        
+        /* PANEL DE SEGUIMIENTO DESPLEGABLE */
+        .panel-seguimiento-box {
+            background-color: #ffffff;
+            border: 2px solid #d97706;
+            border-radius: 12px;
+            padding: 1.4rem 1.6rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 6px 20px rgba(217, 119, 6, 0.12);
         }
         
         .contact-card { background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 1.2rem; margin-bottom: 1.2rem; }
@@ -218,6 +228,9 @@ if "autenticado" not in st.session_state:
     st.session_state["usuario"] = None
     st.session_state["nombre_completo"] = None
     st.session_state["rol"] = None
+
+if "ver_panel_notas_kpi" not in st.session_state:
+    st.session_state["ver_panel_notas_kpi"] = False
 
 def autenticar_usuario(username, password):
     users_ref = db.collection("usuarios")
@@ -265,87 +278,7 @@ if not st.session_state["autenticado"]:
     st.stop()
 
 # ==============================================================================
-# 7. CENTRO INTERACTIVO DE SEGUIMIENTO (VENTANA MODAL FLOTANTE)
-# ==============================================================================
-@st.dialog("📝 Centro Interactivo de Seguimiento de Notas", width="large")
-def dialog_seguimiento_kpi():
-    st.markdown("Consulta el historial completo de interacciones comerciales o registra una nueva nota inmediata.")
-
-    # Mapear nombres de contactos
-    contactos_map = {}
-    contactos_lista = []
-    for doc in db.collection("contactos").stream():
-        d = doc.to_dict()
-        nombre_completo = f"{d.get('nombre', '')} {d.get('apellido', '')} — {d.get('nombre_empresa_cache', '')}".strip()
-        contactos_map[doc.id] = nombre_completo
-        contactos_lista.append((doc.id, nombre_completo))
-
-    # Cargar y ordenar todas las notas en memoria
-    notas_stream = db.collection("notas").stream()
-    todas_las_notas = []
-    for n in notas_stream:
-        nota_dict = n.to_dict()
-        nota_dict["id"] = n.id
-        nota_dict["contacto_nombre"] = contactos_map.get(nota_dict.get("id_contacto"), "Contacto no identificado")
-        todas_las_notas.append(nota_dict)
-
-    todas_las_notas.sort(key=lambda x: str(x.get('fecha', '')), reverse=True)
-
-    tab_ver_notas, tab_crear_nota_rapida = st.tabs(["🔍 Ver Historial Completo", "✍️ Nueva Nota Rápida"])
-
-    with tab_ver_notas:
-        filtro_modal = st.text_input("Filtrar notas:", placeholder="🔍 Escribe cliente, vendedor o texto de la nota...", key="filtro_modal_kpi")
-        
-        notas_filtradas = todas_las_notas
-        if filtro_modal.strip():
-            f_m = filtro_modal.lower()
-            notas_filtradas = [
-                n for n in todas_las_notas 
-                if f_m in str(n.get("nota", "")).lower() 
-                or f_m in str(n.get("autor", "")).lower() 
-                or f_m in str(n.get("contacto_nombre", "")).lower()
-            ]
-
-        if notas_filtradas:
-            st.caption(f"Mostrando **{len(notas_filtradas)}** notas de seguimiento:")
-            for n_item in notas_filtradas:
-                st.markdown(f"""
-                    <div class="note-bubble">
-                        <div class="note-meta">
-                            <span style="color: #2563eb;">📅 {n_item.get('fecha', '')}</span>
-                            <span style="color: #0f172a;">👤 <strong>{n_item.get('contacto_nombre', '')}</strong></span>
-                            <span style="color: #64748b;">Por: <strong>{n_item.get('autor', 'Desconocido')}</strong></span>
-                        </div>
-                        <div class="note-body">{n_item.get('nota', '')}</div>
-                    </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("No se encontraron notas registradas con ese criterio.")
-
-    with tab_crear_nota_rapida:
-        if contactos_lista:
-            opciones_contacto = {item[1]: item[0] for item in contactos_lista}
-            contacto_seleccionado = st.selectbox("Seleccionar Contacto:", options=list(opciones_contacto.keys()), key="select_contacto_modal")
-            nota_rapida_texto = st.text_area("Detalles del acuerdo o llamada:", placeholder="Ej: Se confirmó entrega de repuestos...", height=120, key="texto_nota_modal")
-
-            if st.button("Guardar Nota de Seguimiento", use_container_width=True, key="btn_guardar_nota_modal"):
-                if nota_rapida_texto.strip():
-                    id_cont = opciones_contacto[contacto_seleccionado]
-                    db.collection("notas").add({
-                        "id_contacto": id_cont,
-                        "autor": st.session_state["nombre_completo"],
-                        "nota": nota_rapida_texto.strip(),
-                        "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    })
-                    st.success("¡Nota de seguimiento guardada exitosamente!")
-                    st.rerun()
-                else:
-                    st.error("Por favor ingresa los detalles de la nota.")
-        else:
-            st.info("Primero debes registrar contactos para vincular notas.")
-
-# ==============================================================================
-# 8. PANEL PRINCIPAL Y TARJETAS KPI (ÁREA INTERACTIVA AL HACER CLIC)
+# 7. PANEL PRINCIPAL Y TARJETAS KPI (NOTAS INTERACTIVAS AL CLIC / DOBLE CLIC)
 # ==============================================================================
 def obtener_metricas():
     total_empresas = len(list(db.collection("clientes").stream()))
@@ -367,7 +300,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Grid de 3 KPIs
 col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
 
 with col_kpi1:
@@ -393,12 +325,13 @@ with col_kpi2:
     """, unsafe_allow_html=True)
 
 with col_kpi3:
+    # 🌟 TARJETA INTERACTIVA DE NOTAS AL CLIC O DOBLE CLIC 🌟
     st.markdown(f"""
         <div class="kpi-card kpi-interactive-card" 
              style="border-left: 5.5px solid #d97706;"
              onclick="document.querySelector('.st-key-kpi_notas_click button')?.click()"
              ondblclick="document.querySelector('.st-key-kpi_notas_click button')?.click()"
-             title="Haz clic o doble clic para abrir el seguimiento">
+             title="Haz doble clic para abrir todas las notas de seguimiento">
             <div>
                 <div class="kpi-label">NOTAS DE SEGUIMIENTO</div>
                 <div class="kpi-value">{total_notas}</div>
@@ -406,9 +339,107 @@ with col_kpi3:
             <div style="font-size: 2.2rem;">📝</div>
         </div>
     """, unsafe_allow_html=True)
-
+    
+    # Botón invisible superpuesto para capturar el clic/doble clic de inmediato
     if st.button("abrir_kpi_notas", key="kpi_notas_click"):
-        dialog_seguimiento_kpi()
+        st.session_state["ver_panel_notas_kpi"] = not st.session_state["ver_panel_notas_kpi"]
+        st.rerun()
+
+# ==============================================================================
+# 8. PANEL DESPLEGABLE: TODAS LAS NOTAS DE SEGUIMIENTO (ACTIVADO POR EL KPI)
+# ==============================================================================
+if st.session_state.get("ver_panel_notas_kpi", False):
+    st.markdown("""
+        <div class="panel-seguimiento-box">
+            <h3 style="margin: 0; color: #0f172a; font-size: 1.35rem; font-weight: 800;">
+                📝 Bitácora Global de Seguimiento Comercial
+            </h3>
+            <p style="margin: 3px 0 10px 0; color: #d97706; font-weight: 700; font-size: 0.9rem;">
+                Visualizando todas las interacciones registradas en el sistema
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    col_btn_cerrar, _ = st.columns([1.5, 4])
+    with col_btn_cerrar:
+        if st.button("❌ Cerrar Panel de Seguimiento", use_container_width=True):
+            st.session_state["ver_panel_notas_kpi"] = False
+            st.rerun()
+
+    # Mapear contactos a empresas
+    contactos_map = {}
+    contactos_lista = []
+    for doc in db.collection("contactos").stream():
+        d = doc.to_dict()
+        nombre_completo = f"{d.get('nombre', '')} {d.get('apellido', '')} — {d.get('nombre_empresa_cache', '')}".strip()
+        contactos_map[doc.id] = nombre_completo
+        contactos_lista.append((doc.id, nombre_completo))
+
+    # Cargar y ordenar todas las notas en memoria (sin requerir índices compuestos)
+    notas_stream = db.collection("notas").stream()
+    todas_las_notas = []
+    for n in notas_stream:
+        nota_dict = n.to_dict()
+        nota_dict["id"] = n.id
+        nota_dict["contacto_nombre"] = contactos_map.get(nota_dict.get("id_contacto"), "Contacto General")
+        todas_las_notas.append(nota_dict)
+
+    todas_las_notas.sort(key=lambda x: str(x.get('fecha', '')), reverse=True)
+
+    col_filtro_kpi, col_accion_kpi = st.columns([3, 1.2])
+    with col_filtro_kpi:
+        filtro_notas_txt = st.text_input("Buscador en tiempo real:", placeholder="🔍 Filtrar por nombre de cliente, empresa, vendedor o palabra clave...")
+
+    with st.expander("✍️ Registrar Nueva Nota de Seguimiento Rápida", expanded=False):
+        if contactos_lista:
+            opciones_c = {item[1]: item[0] for item in contactos_lista}
+            contacto_sel = st.selectbox("Seleccione el contacto:", options=list(opciones_c.keys()), key="sel_kpi_contacto")
+            texto_nota_kpi = st.text_area("Detalles del acuerdo o llamada:", placeholder="Ej: Se coordinó entrega para el martes...", height=100)
+            if st.button("Guardar Nota Inmediata", use_container_width=True):
+                if texto_nota_kpi.strip():
+                    db.collection("notas").add({
+                        "id_contacto": opciones_c[contacto_sel],
+                        "autor": st.session_state["nombre_completo"],
+                        "nota": texto_nota_kpi.strip(),
+                        "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    })
+                    st.success("¡Nota registrada exitosamente!")
+                    st.rerun()
+                else:
+                    st.error("Por favor escribe el contenido de la nota.")
+        else:
+            st.info("No hay contactos disponibles para vincular notas.")
+
+    # Filtrar notas según el texto ingresado
+    notas_a_mostrar = todas_las_notas
+    if filtro_notas_txt.strip():
+        f_kpi = filtro_notas_txt.lower()
+        notas_a_mostrar = [
+            n for n in todas_las_notas
+            if f_kpi in str(n.get("nota", "")).lower()
+            or f_kpi in str(n.get("autor", "")).lower()
+            or f_kpi in str(n.get("contacto_nombre", "")).lower()
+        ]
+
+    st.markdown(f"**Total de notas encontradas:** `{len(notas_a_mostrar)}`")
+
+    if notas_a_mostrar:
+        for item_n in notas_a_mostrar:
+            st.markdown(f"""
+                <div class="note-bubble">
+                    <div class="note-meta">
+                        <span style="color: #2563eb;">📅 {item_n.get('fecha', '')}</span>
+                        <span style="color: #0f172a;">🏢 <strong>{item_n.get('contacto_nombre', '')}</strong></span>
+                        <span style="color: #64748b;">👤 Vendedor: <strong>{item_n.get('autor', 'Desconocido')}</strong></span>
+                    </div>
+                    <div class="note-body">{item_n.get('nota', '')}</div>
+                </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.info("No se encontraron notas registradas con ese criterio.")
+
+    st.markdown("---")
+
 # ==============================================================================
 # 9. BARRA LATERAL (REGISTRO INDIVIDUAL + IMPORTACIÓN MASIVA INTELIGENTE)
 # ==============================================================================
