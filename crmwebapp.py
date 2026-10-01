@@ -19,16 +19,16 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 2. INICIALIZACIÓN ROBUSTA DE FIREBASE FIRESTORE
+# 2. INICIALIZACIÓN DE FIREBASE FIRESTORE
 # ==============================================================================
 if not firebase_admin._apps:
     cred = None
     cred_path = os.path.join(os.path.dirname(__file__), "firebase_credentials.json")
     
-    # 1. Intento por archivo JSON local
+    # 1. Archivo local
     if os.path.exists(cred_path):
         cred = credentials.Certificate(cred_path)
-    # 2. Intento por secret en formato JSON string
+    # 2. Streamlit Secrets en formato JSON
     elif "firebase_json" in st.secrets:
         try:
             creds_dict = json.loads(st.secrets["firebase_json"])
@@ -38,7 +38,7 @@ if not firebase_admin._apps:
         except Exception as e:
             st.error(f"Error decodificando 'firebase_json': {e}")
             st.stop()
-    # 3. Intento por secret en formato TOML [firebase]
+    # 3. Streamlit Secrets en formato TOML [firebase]
     elif "firebase" in st.secrets:
         try:
             creds_dict = dict(st.secrets["firebase"])
@@ -101,7 +101,7 @@ svg_truck_raw = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 85" 
 truck_base64 = base64.b64encode(svg_truck_raw.encode("utf-8")).decode("utf-8")
 
 # ==============================================================================
-# 4. ESTILOS CSS PROFESIONALES DE ALTO CONTRASTE
+# 4. ESTILOS CSS PROFESIONALES (TARJETAS KPI INTERACTIVAS)
 # ==============================================================================
 st.markdown("""
     <style>
@@ -142,14 +142,47 @@ st.markdown("""
         }
         button p, .stButton > button p, button span { color: #ffffff !important; font-weight: 700 !important; }
         button:hover, .stButton > button:hover { background-color: #1d4ed8 !important; box-shadow: 0 6px 14px rgba(29, 78, 216, 0.4) !important; }
-        [data-testid="stFileUploaderDropzone"] { background-color: #ffffff !important; border: 2px dashed #64748b !important; border-radius: 8px !important; }
-        .kpi-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        
+        /* DISEÑO DE TARJETAS KPI */
         .kpi-card {
-            background-color: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 10px; padding: 1rem 1.2rem;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.04); border-left: 5px solid #2563eb; display: flex; align-items: center; justify-content: space-between;
+            background-color: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 10px; padding: 1.1rem 1.3rem;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04); display: flex; align-items: center; justify-content: space-between;
+            min-height: 92px; height: 92px; box-sizing: border-box;
+        }
+        
+        /* TARJETA KPI INTERACTIVA (NOTAS) */
+        .kpi-interactive-card {
+            cursor: pointer !important;
+            transition: all 0.22s ease-in-out !important;
+            user-select: none;
+        }
+        .kpi-interactive-card:hover {
+            transform: translateY(-3px) !important;
+            box-shadow: 0 8px 20px rgba(217, 119, 6, 0.22) !important;
+            border-color: #d97706 !important;
+            background-color: #fffdfa !important;
         }
         .kpi-label { font-size: 0.82rem; text-transform: uppercase; font-weight: 800; color: #475569 !important; }
-        .kpi-value { font-size: 1.8rem; font-weight: 900; color: #0f172a !important; margin-top: 2px; }
+        .kpi-value { font-size: 1.85rem; font-weight: 900; color: #0f172a !important; margin-top: 2px; }
+        
+        /* SUPERPOSICIÓN TRANSPARENTE DEL BOTÓN SOBRE LA TARJETA */
+        .st-key-kpi_notas_click {
+            margin-top: -92px !important;
+            height: 92px !important;
+            position: relative !important;
+            z-index: 10 !important;
+        }
+        .st-key-kpi_notas_click button {
+            height: 92px !important;
+            width: 100% !important;
+            opacity: 0 !important;
+            cursor: pointer !important;
+            background: transparent !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        
         .contact-card { background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 1.2rem; margin-bottom: 1.2rem; }
         .note-bubble {
             background-color: #ffffff; border: 1px solid #cbd5e1; border-left: 4px solid #2563eb;
@@ -161,7 +194,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 5. SEGURIDAD, CONTRASEÑAS Y AUTENTICACIÓN
+# 5. SEGURIDAD Y CONTROL DE SESIÓN
 # ==============================================================================
 def hash_password(password):
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
@@ -232,7 +265,87 @@ if not st.session_state["autenticado"]:
     st.stop()
 
 # ==============================================================================
-# 7. PANEL PRINCIPAL Y TARJETAS KPI
+# 7. CENTRO INTERACTIVO DE SEGUIMIENTO (VENTANA MODAL FLOTANTE)
+# ==============================================================================
+@st.dialog("📝 Centro Interactivo de Seguimiento de Notas", width="large")
+def dialog_seguimiento_kpi():
+    st.markdown("Consulta el historial completo de interacciones comerciales o registra una nueva nota inmediata.")
+
+    # Mapear nombres de contactos
+    contactos_map = {}
+    contactos_lista = []
+    for doc in db.collection("contactos").stream():
+        d = doc.to_dict()
+        nombre_completo = f"{d.get('nombre', '')} {d.get('apellido', '')} — {d.get('nombre_empresa_cache', '')}".strip()
+        contactos_map[doc.id] = nombre_completo
+        contactos_lista.append((doc.id, nombre_completo))
+
+    # Cargar y ordenar todas las notas en memoria
+    notas_stream = db.collection("notas").stream()
+    todas_las_notas = []
+    for n in notas_stream:
+        nota_dict = n.to_dict()
+        nota_dict["id"] = n.id
+        nota_dict["contacto_nombre"] = contactos_map.get(nota_dict.get("id_contacto"), "Contacto no identificado")
+        todas_las_notas.append(nota_dict)
+
+    todas_las_notas.sort(key=lambda x: str(x.get('fecha', '')), reverse=True)
+
+    tab_ver_notas, tab_crear_nota_rapida = st.tabs(["🔍 Ver Historial Completo", "✍️ Nueva Nota Rápida"])
+
+    with tab_ver_notas:
+        filtro_modal = st.text_input("Filtrar notas:", placeholder="🔍 Escribe cliente, vendedor o texto de la nota...", key="filtro_modal_kpi")
+        
+        notas_filtradas = todas_las_notas
+        if filtro_modal.strip():
+            f_m = filtro_modal.lower()
+            notas_filtradas = [
+                n for n in todas_las_notas 
+                if f_m in str(n.get("nota", "")).lower() 
+                or f_m in str(n.get("autor", "")).lower() 
+                or f_m in str(n.get("contacto_nombre", "")).lower()
+            ]
+
+        if notas_filtradas:
+            st.caption(f"Mostrando **{len(notas_filtradas)}** notas de seguimiento:")
+            for n_item in notas_filtradas:
+                st.markdown(f"""
+                    <div class="note-bubble">
+                        <div class="note-meta">
+                            <span style="color: #2563eb;">📅 {n_item.get('fecha', '')}</span>
+                            <span style="color: #0f172a;">👤 <strong>{n_item.get('contacto_nombre', '')}</strong></span>
+                            <span style="color: #64748b;">Por: <strong>{n_item.get('autor', 'Desconocido')}</strong></span>
+                        </div>
+                        <div class="note-body">{n_item.get('nota', '')}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("No se encontraron notas registradas con ese criterio.")
+
+    with tab_crear_nota_rapida:
+        if contactos_lista:
+            opciones_contacto = {item[1]: item[0] for item in contactos_lista}
+            contacto_seleccionado = st.selectbox("Seleccionar Contacto:", options=list(opciones_contacto.keys()), key="select_contacto_modal")
+            nota_rapida_texto = st.text_area("Detalles del acuerdo o llamada:", placeholder="Ej: Se confirmó entrega de repuestos...", height=120, key="texto_nota_modal")
+
+            if st.button("Guardar Nota de Seguimiento", use_container_width=True, key="btn_guardar_nota_modal"):
+                if nota_rapida_texto.strip():
+                    id_cont = opciones_contacto[contacto_seleccionado]
+                    db.collection("notas").add({
+                        "id_contacto": id_cont,
+                        "autor": st.session_state["nombre_completo"],
+                        "nota": nota_rapida_texto.strip(),
+                        "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    })
+                    st.success("¡Nota de seguimiento guardada exitosamente!")
+                    st.rerun()
+                else:
+                    st.error("Por favor ingresa los detalles de la nota.")
+        else:
+            st.info("Primero debes registrar contactos para vincular notas.")
+
+# ==============================================================================
+# 8. PANEL PRINCIPAL Y TARJETAS KPI (ÁREA INTERACTIVA AL HACER CLIC)
 # ==============================================================================
 def obtener_metricas():
     total_empresas = len(list(db.collection("clientes").stream()))
@@ -254,34 +367,53 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown(f"""
-<div class="kpi-container">
-    <div class="kpi-card">
-        <div>
-            <div class="kpi-label">Empresas Clientes</div>
-            <div class="kpi-value">{total_empresas}</div>
+# Grid de 3 KPIs
+col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
+
+with col_kpi1:
+    st.markdown(f"""
+        <div class="kpi-card" style="border-left: 5px solid #2563eb;">
+            <div>
+                <div class="kpi-label">Empresas Clientes</div>
+                <div class="kpi-value">{total_empresas}</div>
+            </div>
+            <div style="font-size: 2.2rem;">🏢</div>
         </div>
-        <div style="font-size: 2.2rem;">🏢</div>
-    </div>
-    <div class="kpi-card" style="border-left-color: #0284c7;">
-        <div>
-            <div class="kpi-label">Contactos Activos</div>
-            <div class="kpi-value">{total_contactos}</div>
+    """, unsafe_allow_html=True)
+
+with col_kpi2:
+    st.markdown(f"""
+        <div class="kpi-card" style="border-left: 5px solid #0284c7;">
+            <div>
+                <div class="kpi-label">Contactos Activos</div>
+                <div class="kpi-value">{total_contactos}</div>
+            </div>
+            <div style="font-size: 2.2rem;">👥</div>
         </div>
-        <div style="font-size: 2.2rem;">👥</div>
-    </div>
-    <div class="kpi-card" style="border-left-color: #d97706;">
-        <div>
-            <div class="kpi-label">Notas de Seguimiento</div>
-            <div class="kpi-value">{total_notas}</div>
+    """, unsafe_allow_html=True)
+
+with col_kpi3:
+    # 🌟 TARJETA DE NOTAS INTERACTIVA AL CLIC / DOBLE CLIC 🌟
+    st.markdown(f"""
+        <div class="kpi-card kpi-interactive-card" 
+             style="border-left: 5.5px solid #d97706;"
+             onclick="document.querySelector('.st-key-kpi_notas_click button')?.click()"
+             ondblclick="document.querySelector('.st-key-kpi_notas_click button')?.click()"
+             title="Haz clic o doble clic para abrir el seguimiento">
+            <div>
+                <div class="kpi-label">NOTAS DE SEGUIMIENTO</div>
+                <div class="kpi-value">{total_notas}</div>
+            </div>
+            <div style="font-size: 2.2rem;">📝</div>
         </div>
-        <div style="font-size: 2.2rem;">📝</div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+    
+    # Botón superpuesto transparente para capturar el clic/doble clic de inmediato
+    if st.button("abrir_kpi_notas", key="kpi_notas_click", label_visibility="collapsed"):
+        dialog_seguimiento_kpi()
 
 # ==============================================================================
-# 8. BARRA LATERAL (REGISTRO INDIVIDUAL + IMPORTACIÓN MASIVA MEJORADA)
+# 9. BARRA LATERAL (REGISTRO INDIVIDUAL + IMPORTACIÓN MASIVA INTELIGENTE)
 # ==============================================================================
 st.sidebar.markdown(f"""
     <div class="user-badge">
@@ -356,10 +488,8 @@ archivo_excel = st.sidebar.file_uploader("Cargar archivo .xlsx", type=["xlsx", "
 if archivo_excel is not None:
     if st.sidebar.button("Procesar e Importar", use_container_width=True):
         try:
-            # dtype=str lee todo como texto puro y previene que los teléfonos terminen en .0 o en notación científica
             df_import = pd.read_excel(archivo_excel, dtype=str)
             
-            # Buscador inteligente de columnas insensible a tildes, mayúsculas o espacios
             def extraer_campo(fila, posibles_nombres):
                 for col in fila.index:
                     col_limpia = str(col).strip().lower()
@@ -370,7 +500,6 @@ if archivo_excel is not None:
                         if col_sin_tilde == pos_sin_tilde or col_limpia == pos.lower():
                             valor = str(fila[col]).strip()
                             if valor.lower() not in ['nan', 'none', '', '<na>']:
-                                # Si Excel dejó un .0 al final por formato decimal, se lo quitamos
                                 if valor.endswith('.0'):
                                     valor = valor[:-2]
                                 return valor
@@ -386,7 +515,6 @@ if archivo_excel is not None:
                 eml = extraer_campo(row, ['Email', 'Correo', 'Correo Electronico', 'E-mail'])
                 tel = extraer_campo(row, ['Telefono', 'Teléfono', 'Celular', 'Movil', 'Móvil', 'Tel', 'Phone'])
 
-                # Omitir filas sin datos principales
                 if not emp or not nom:
                     continue
 
@@ -402,19 +530,19 @@ if archivo_excel is not None:
                     "apellido": ape,
                     "cargo": car,
                     "email": eml,
-                    "telefono": tel,  # <-- Teléfono capturado fielmente
+                    "telefono": tel,
                     "nombre_empresa_cache": emp,
                     "sector_cache": sec
                 })
                 importados += 1
 
-            st.sidebar.success(f"¡Se importaron {importados} contactos con sus teléfonos exitosamente!")
+            st.sidebar.success(f"¡Se importaron {importados} contactos con sus teléfonos!")
             st.rerun()
         except Exception as e:
             st.sidebar.error(f"Error al procesar archivo: {e}")
 
 # ==============================================================================
-# 9. PESTAÑAS PRINCIPALES DEL CRM
+# 10. PESTAÑAS PRINCIPALES DEL CRM
 # ==============================================================================
 pestanas_nombres = ["📋 Directorio y Notas", "✏️ Modificar Registros"]
 if st.session_state["rol"] == "Admin":
@@ -484,10 +612,8 @@ with pestanas[0]:
 
                 with col_historial:
                     st.markdown("#### Historial de Interacciones")
-                    # Consulta segura: sin .order_by() en Firestore para no requerir índice compuesto
                     notas_docs = db.collection("notas").where("id_contacto", "==", id_sel).stream()
                     notas = [n.to_dict() for n in notas_docs]
-                    # Ordenar en memoria por fecha más reciente
                     notas.sort(key=lambda x: str(x.get('fecha', '')), reverse=True)
 
                     if notas:
@@ -509,7 +635,7 @@ with pestanas[0]:
                     with st.form("form_nota", clear_on_submit=True):
                         nueva_nota = st.text_area(
                             "Detalles de la conversación o acuerdo:", 
-                            placeholder="Ej: Se cotizaron frenos de aire y filtros...",
+                            placeholder="Ej: Se coordinó entrega de repuestos...",
                             height=120
                         )
                         submit_nota = st.form_submit_button("Guardar Nota", use_container_width=True)
@@ -625,7 +751,7 @@ if st.session_state["rol"] == "Admin":
             u = doc.to_dict()
             usuarios_db.append((doc.id, u.get("username", ""), u.get("nombre_completo", ""), u.get("rol", ""), u.get("fecha_creacion", "")))
 
-        # 1. LISTADO DE USUARIOS
+        # 1. LISTADO
         with subtab_lista:
             if usuarios_db:
                 df_usuarios = pd.DataFrame(usuarios_db, columns=["ID", "Usuario", "Nombre Completo", "Rol", "Fecha de Creación"])
@@ -633,7 +759,7 @@ if st.session_state["rol"] == "Admin":
             else:
                 st.info("No hay usuarios registrados.")
 
-        # 2. CREAR USUARIO
+        # 2. CREAR
         with subtab_crear:
             st.markdown("#### Registrar un Nuevo Acceso")
             with st.form("form_nuevo_usuario", clear_on_submit=True):
@@ -664,7 +790,7 @@ if st.session_state["rol"] == "Admin":
                             st.success(f"Usuario '{nuevo_user}' creado exitosamente.")
                             st.rerun()
 
-        # 3. EDITAR USUARIO
+        # 3. EDITAR
         with subtab_editar:
             st.markdown("#### Modificar Datos o Cambiar Contraseña")
             if usuarios_db:
@@ -713,7 +839,7 @@ if st.session_state["rol"] == "Admin":
             else:
                 st.info("No hay usuarios disponibles.")
 
-        # 4. ELIMINAR USUARIO
+        # 4. ELIMINAR
         with subtab_eliminar:
             st.markdown("#### Dar de Baja una Cuenta")
             if usuarios_db:
